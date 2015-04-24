@@ -1,0 +1,19 @@
+Package godata defines types and functions for manipulating data in the Go
+programming language. The package wraps data around a View interface, which
+structures a dataset into labelled rows and columns. A View may be backed by an
+in-memory DataFrame, a database, or any other data store that satisfies basic
+filtering operations.
+
+For more details on usage, see comments in the godata package.
+
+Getting Started
+---------------
+    import "github.com/google/godata"
+
+    df := godata.NewDataFrameFromInts(nil, nil, [][]int{{1, 2, 3}, {4, 5, 6}})
+    fmt.Print("The DataFrame is:", df)
+    // Two rows, three columns with default integer index:
+    //      0  1  2
+    //      -------
+    // 0| {{1, 2, 3},
+    // 1|  {4, 5, 6}}
