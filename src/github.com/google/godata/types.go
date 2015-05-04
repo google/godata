@@ -52,13 +52,21 @@ func (i *IntValue) Hash() string {
 }
 
 // V returns the int value.
-func (i IntValue) V() interface{} {
+func (i *IntValue) V() interface{} {
 	return i.value
 }
 
 // String returns the string value.
-func (i IntValue) String() string {
+func (i *IntValue) String() string {
 	return fmt.Sprintf("%d", i.value)
+}
+
+// Equals returns true if the given value is an integer with the same value.
+func (i *IntValue) Equals(v Value) bool {
+	if intval, ok := v.(*IntValue); ok {
+		return intval.value == i.value
+	}
+	return false
 }
 
 // StringValue represents a string value.
@@ -90,13 +98,21 @@ func (s *StringValue) Hash() string {
 }
 
 // V returns the string value.
-func (s StringValue) V() interface{} {
+func (s *StringValue) V() interface{} {
 	return s.value
 }
 
 // String returns the string value.
-func (s StringValue) String() string {
+func (s *StringValue) String() string {
 	return s.value
+}
+
+// Equals returns true if the given value is a string with the same value.
+func (s *StringValue) Equals(v Value) bool {
+	if stringval, ok := v.(*StringValue); ok {
+		return stringval.value == s.value
+	}
+	return false
 }
 
 // Float64Value represents a float64 value.
@@ -127,13 +143,21 @@ func (f *Float64Value) Hash() string {
 }
 
 // V returns the float64 value.
-func (f Float64Value) V() interface{} {
+func (f *Float64Value) V() interface{} {
 	return f.value
 }
 
 // String returns the string value.
-func (f Float64Value) String() string {
+func (f *Float64Value) String() string {
 	return fmt.Sprintf("%f", f.value)
+}
+
+// Equals returns true if the given value is a float64 with the same value.
+func (f *Float64Value) Equals(v Value) bool {
+	if floatval, ok := v.(*Float64Value); ok {
+		return floatval.value == f.value
+	}
+	return false
 }
 
 func cachedHash(hash *string, v interface{}) string {
