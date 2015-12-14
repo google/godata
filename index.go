@@ -1,12 +1,9 @@
 /*
 Copyright 2014 Google Inc. All Rights Reserved.
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-
     http://www.apache.org/licenses/LICENSE-2.0
-
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,148 +13,138 @@ limitations under the License.
 
 package godata
 
-// Index represents an indexed, hierarchical collection of values. The indexed values do not have to
-// be unique.
-type Index struct {
-	// values contains all values in the index.
-	values []Value
+import (
+	"fmt"
+	"log"
 
-	// index maps a hash to the position in values.
-	index map[string][]int
+	"github.com/google/btree"
+)
 
-	// levelIndex maps a given level and hash to the position in values.
-	levelIndex []map[string][]int
-
-	// pathIndex maps a chain of value hashes into indices.
-	pathIndex *pathIndexNode
+// Index compares rows.
+type Index interface {
+	// Less returns true if the index is less than the given Index or Row object.
+	// If the argument is an Index, then it must be the same underlying type. If
+	// the argument is a Row, then it must be indexed by an Index object with the
+	// same underlying type.
+	Less(item btree.Item) bool
 }
 
-// NewIndex returns a computed Index on the given set of values. The index is optimized for
-// returning indices on exact matches of values, exact matches of values at a given level (for
-// MultiValue indices), and partial matches of a given path (for MultiValue indices).
-func NewIndex(v []Value) *Index {
-	index := &Index{
-		values:     copyValues(v),
-		index:      make(map[string][]int),
-		levelIndex: make([]map[string][]int, 1),
-		pathIndex:  &pathIndexNode{},
-	}
-	for i, val := range v {
-		index.index[val.Hash()] = append(index.index[val.Hash()], i)
-		if multival, ok := val.(*MultiValue); ok {
-			initializeMultiValueIndex(index, multival, i)
-		} else {
-			initializeSingleValueIndex(index, val, i)
+// NullIndex represents a missing index. It is considered less than any other
+// index.
+type NullIndex struct{}
+
+// Less returns true for all arguments.
+func (n NullIndex) Less(btree.Item) bool {
+	return true
+}
+
+// NewIndex returns an index for the given generic values. Returns error if the
+// values cannot be automatically converted to an index.
+func NewIndex(vals ...interface{}) (Index, error) {
+	var indices []Index
+
+	for _, v := range vals {
+		switch v := v.(type) {
+		default:
+			return nil, fmt.Errorf("NewIndex given unsupported value %v", v)
+		case int:
+			indices = append(indices, IntIndex(v))
+		case string:
+			indices = append(indices, StringIndex(v))
 		}
 	}
-	return index
-}
 
-// Values returns the values held by the index.
-func (i *Index) Values() []Value {
-	return copyValues(i.values)
-}
-
-// Lookup returns the indices of the given value, if at least one exists, or nil otherwise.
-func (i *Index) Lookup(v *MultiValue) []int {
-	if index, ok := i.index[v.Hash()]; ok {
-		return copyInts(index)
+	if len(indices) == 0 {
+		return NullIndex{}, nil
 	}
-	return nil
+	if len(indices) == 1 {
+		return indices[0], nil
+	}
+	return NewMultiIndex(indices...), nil
 }
 
-// LookupLevel returns the indices of the given value at the given level, if at least one exists, or
-// nil otherwise. A level is defined as the nesting depth within a MultiValue. All Value objects
-// have an implicitly defined level zero. For MultiValues, the level zero value is the root head, and
-// for all other values, the level zero value is itself.
-func (i *Index) LookupLevel(level int, v Value) []int {
-	if level >= 0 && level < len(i.levelIndex) {
-		if index, ok := i.levelIndex[level][v.Hash()]; ok {
-			return copyInts(index)
+// MultiIndex compares rows via a dictionary comparison on multiple Index
+// objects.
+type MultiIndex struct {
+	indices []Index
+}
+
+// NewMultiIndex returns a MultiIndex for the given indices.
+func NewMultiIndex(indices ...Index) MultiIndex {
+	return MultiIndex{indices}
+}
+
+// Less returns true if the index is less than the given MultiIndex object, or
+// if it is less than the given Row object indexed by a MultiIndex. Comparision
+// is performed in index order. For example, given MultiIndex objects
+// ["a", "b"], ["a", "c"], the first index is less than the second index. A
+// MultiIndex with fewer constituent indices is less than a MultiIndex that
+// agrees on all existing values. For example, ["a"] is less than ["a", "b"].
+func (m MultiIndex) Less(item btree.Item) bool {
+	var mi MultiIndex
+	switch item := item.(type) {
+	default:
+		log.Fatal("MultiIndex compared with object that isn't a MultiIndex or Row")
+	case MultiIndex:
+		mi = item
+	case Row:
+		return m.Less(item.index)
+	}
+
+	for i, ind := range m.indices {
+		// If no previous comparison was definitive, and the current index is
+		// populated, then it is a greater MultiIndex value.
+		if i >= len(mi.indices) {
+			return false
+		}
+		otherInd := mi.indices[i]
+		if ind.Less(otherInd) {
+			return true
+		}
+		if otherInd.Less(ind) {
+			return false
 		}
 	}
-	return nil
+
+	// The two multiindices must be equal for all given elements.
+	return len(m.indices) < len(mi.indices)
 }
 
-// LookupPath returns the indices starting with the given path, if at least one exists, or nil
-// otherwise. For example, given the values {"foo", "bar", "baz"], this method will return the
-// indices of all MultiValues whose head values are "foo", "bar", and "baz".
-func (i *Index) LookupPath(path []Value) []int {
-	currentPathIndex := i.pathIndex
-	for _, p := range path {
-		if next, ok := currentPathIndex.nextLevel[p.Hash()]; ok {
-			currentPathIndex = next
-		} else {
-			return nil
-		}
-	}
-	return copyInts(currentPathIndex.index)
+// String formats the MultiIndex as a string.
+func (m MultiIndex) String() string {
+	return fmt.Sprintf("%v", m.indices)
 }
 
-// pathIndexNode represents one node in the internal path index. Each node includes all indices that
-// match the path represented by that node. Each node also includes a reference to all subsequent
-// nodes, indexed by the next node value.
-type pathIndexNode struct {
-	index     []int
-	nextLevel map[string]*pathIndexNode
+// StringIndex is a string.
+type StringIndex string
+
+// Less returns true if the string is less than the given StringIndex or Row
+// object. Ordering follows the standard string comparison function.
+func (s StringIndex) Less(item btree.Item) bool {
+	switch item := item.(type) {
+	default:
+		log.Fatal("StringIndex compared with object that isn't a StringIndex or Row")
+	case StringIndex:
+		return string(s) < string(item)
+	case Row:
+		return s.Less(item.index)
+	}
+	return false
 }
 
-func initializeSingleValueIndex(index *Index, val Value, pos int) {
-	if index.levelIndex[0] == nil {
-		index.levelIndex[0] = make(map[string][]int)
-	}
-	if index.pathIndex.nextLevel == nil {
-		index.pathIndex.nextLevel = make(map[string]*pathIndexNode)
-	}
-	index.levelIndex[0][val.Hash()] = append(index.levelIndex[0][val.Hash()], pos)
-	index.pathIndex.nextLevel[val.Hash()].index = append(index.pathIndex.nextLevel[val.Hash()].index, pos)
-}
+// IntIndex is an int.
+type IntIndex int
 
-func initializeMultiValueIndex(index *Index, multival *MultiValue, pos int) {
-	for level, pi := 0, index.pathIndex; ; level++ {
-		if multival.Head != nil {
-			initializeLevelIndex(index, level, multival.Head, pos)
-			initializePathIndex(index, pi, multival.Head, pos)
-			if multival.Tail == nil {
-				break
-			} else {
-				multival = multival.Tail
-				pi = pi.nextLevel[multival.Head.Hash()]
-			}
-		}
+// Less returns true if the int is less than the given IntIndex or Row
+// object. Ordering follows the standard int comparison function.
+func (s IntIndex) Less(item btree.Item) bool {
+	switch item := item.(type) {
+	default:
+		log.Fatal("IntIndex compared with object that isn't a IntIndex or Row")
+	case IntIndex:
+		return int(s) < int(item)
+	case Row:
+		return s.Less(item.index)
 	}
-}
-
-func initializeLevelIndex(index *Index, level int, value Value, pos int) {
-	if len(index.levelIndex) <= level {
-		grownLevelIndex := make([]map[string][]int, 2+2*level)
-		copy(grownLevelIndex, index.levelIndex)
-		index.levelIndex = grownLevelIndex
-	}
-	if index.levelIndex[level] == nil {
-		index.levelIndex[level] = make(map[string][]int)
-	}
-	index.levelIndex[level][value.Hash()] = append(index.levelIndex[level][value.Hash()], pos)
-}
-
-func initializePathIndex(index *Index, parent *pathIndexNode, value Value, pos int) {
-	if parent.nextLevel == nil {
-		parent.nextLevel = make(map[string]*pathIndexNode)
-	}
-	if parent.nextLevel[value.Hash()] == nil {
-		parent.nextLevel[value.Hash()] = &pathIndexNode{}
-	}
-	parent.nextLevel[value.Hash()].index = append(parent.nextLevel[value.Hash()].index, pos)
-}
-
-func copyValues(v []Value) []Value {
-	r := make([]Value, len(v))
-	copy(r, v)
-	return r
-}
-
-func copyInts(v []int) []int {
-	r := make([]int, len(v))
-	copy(r, v)
-	return r
+	return false
 }
