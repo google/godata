@@ -17,14 +17,14 @@ import "testing"
 
 func TestPutAndGetFrame(t *testing.T) {
 	f := NewFrame(NewColumnIndexer("i1", "i2"))
-	r1, err := f.Put(map[string]interface{}{"i1": 1, "i2": 1, "data": "foo"})
+	r1, err := f.Put(RowOf("i1", 1, "i2", 1, "data", "foo"))
 	if err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 	if r1 != nil {
 		t.Fatalf("Put = %v; want nil", r1)
 	}
-	r2, err := f.Put((map[string]interface{}{"i1": 1, "i2": 2, "data": "bar"}))
+	r2, err := f.Put(RowOf("i1", 1, "i2", 2, "data", "bar"))
 	if err != nil {
 		t.Fatalf("Put: %v", err)
 	}
@@ -32,15 +32,67 @@ func TestPutAndGetFrame(t *testing.T) {
 		t.Fatalf("Put = %v; want nil", r2)
 	}
 
-	r1, err = f.Get(map[string]interface{}{"i1": 1, "i2": 1})
+	r1, err = f.Get(RowOf("i1", 1, "i2", 1))
 
 	if got, want := r1["data"], "foo"; got != want {
 		t.Errorf("r1[%q] = %q; want %q", "data", got, want)
 	}
 
-	r2, err = f.Get(map[string]interface{}{"i1": 1, "i2": 2})
+	r2, err = f.Get(RowOf("i1", 1, "i2", 2))
 	if got, want := r2["data"], "bar"; got != want {
 		t.Errorf("r2[%q] = %q; want %q", "data", got, want)
 	}
+}
 
+func TestJoined(t *testing.T) {
+	f1 := NewFrame(NewColumnIndexer("i1", "i2"))
+	f2 := NewFrame(NewColumnIndexer("i1", "i2"))
+
+	f1.Put(RowOf("i1", 1, "i2", 1, "data", "foo"))
+	f2.Put(RowOf("i1", 1, "i2", 1, "data", "bar"))
+
+	f1.Put(RowOf("i1", 1, "i2", 2, "data", "hello"))
+	f2.Put(RowOf("i1", 1, "i2", 2, "data", "world"))
+
+	f1.Put(RowOf("i1", 2, "i2", 1, "data", "pikachu"))
+	f2.Put(RowOf("i1", 2, "i2", 1, "data", "raichu"))
+
+	f1.Put(RowOf("i1", 0, "i2", 1, "data", "nyc"))
+	f2.Put(RowOf("i1", 1, "i2", 0, "data", "sfo"))
+
+	f3, err := f1.Joined(f2)
+	if err != nil {
+		t.Fatalf("Joined: %v", err)
+	}
+	tt := []struct {
+		i1    int
+		i2    int
+		left  string
+		right string
+	}{
+		{1, 1, "foo", "bar"},
+		{1, 2, "hello", "world"},
+		{2, 1, "pikachu", "raichu"},
+		{0, 1, "nyc", ""},
+		{1, 0, "", "sfo"},
+	}
+
+	for _, tt := range tt {
+		got, err := f3.Get(RowOf("i1", tt.i1, "i2", tt.i2))
+		if err != nil {
+			t.Errorf("Get: %v", err)
+			continue
+		}
+		jr, ok := got["data"].(*JoinResult)
+		if !ok {
+			t.Errorf("Get = %v; want JoinResult", got)
+			continue
+		}
+		if (jr.Left == nil) != (tt.left == "") && jr.Left != tt.left {
+			t.Errorf("Get = %v; want left = %q", jr, tt.left)
+		}
+		if (jr.Right == nil) != (tt.right == "") && jr.Right != tt.right {
+			t.Errorf("Get = %v; want right = %q", jr, tt.right)
+		}
+	}
 }

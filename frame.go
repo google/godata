@@ -14,6 +14,7 @@ limitations under the License.
 package godata
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/google/btree"
@@ -176,6 +177,23 @@ func (f *Frame) forRange(opts *rangeOptions, action rowAction) ([]interface{}, e
 	return returnValues, returnError
 }
 
+// String returns the string representation of the Frame.
+//
+// TODO: The output is ugly and potentially very long. Refactor the forRange to
+// take a limit, and then print out a partial representation of the Frame if
+// there are too many rows.
+func (f *Frame) String() string {
+	rows, err := f.GetRange()
+	if err != nil {
+		return fmt.Sprintf("Frame.String: %v", err)
+	}
+	var buf bytes.Buffer
+	for i, r := range rows {
+		buf.WriteString(fmt.Sprintf("%d: %v\n", i, r))
+	}
+	return buf.String()
+}
+
 // GetRange returns a list of all values in the given range. See GreaterOrEqual
 // and LessThan. If no range is given, then this function returns all rows. If
 // only a begin range is given, then this function returns all rows beginning
@@ -222,6 +240,70 @@ func (f *Frame) PopRange(args ...rangeArg) ([]RowData, error) {
 	}
 
 	return data, nil
+}
+
+// Joined returns a new Frame object that contains the joined contents of the
+// two frames. The indices of the frames must be compatible. The resulting
+// Frame contains one row for each key in the union of keys for the left and
+// right frames. The RowData contains a JoinResult for each column of data,
+// where Left is populated with the left side contents, and Right is populated
+// with the right side contents. Left and Right are nil if they don't exist in
+// the left and right sides.
+func (f *Frame) Joined(frame *Frame) (*Frame, error) {
+	fr := NewFrame(JoinResultIndexer{f.indexer})
+
+	// Add all left rows.
+	all, err := f.GetRange()
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range all {
+		// Convert each column to a JoinResult.
+		projected := make(map[string]interface{})
+		for col, val := range row {
+			projected[col] = &JoinResult{Left: val}
+		}
+
+		_, err := fr.Put(projected)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Add all right rows.
+	all, err = frame.GetRange()
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range all {
+		projected, err := fr.Get(row)
+		if err != nil {
+			return nil, err
+		}
+		if projected == nil {
+			projected = make(map[string]interface{})
+		}
+
+		// Add Right to each column JoinResult, or add a JoinResult if the column doesn't exist yet.
+		for col, val := range row {
+			joinResult, ok := projected[col]
+			if ok {
+				jd, ok := joinResult.(*JoinResult)
+				if !ok {
+					return nil, fmt.Errorf("Frame: column %q in %v is not a JoinResult", col, joinResult)
+				}
+				jd.Right = val
+			} else {
+				projected[col] = &JoinResult{Right: val}
+			}
+		}
+		fr.Put(projected)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return fr, nil
 }
 
 // WithIndexer returns a new Frame object with the same underlying data indexed
