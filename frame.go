@@ -311,6 +311,9 @@ func (f *Frame) Joined(frame *Frame) (*Frame, error) {
 // indexer. Note that mutating rows in the returned Frame will also mutate the
 // rows in the existing Frame. However, adding to or deleting rows from the
 // returned Frame will not add to and delete from the existing Frame.
+// WithIndexer assumes that the given Indexer gives each existing row a unique
+// Index. If rows share an index, then one of the rows will be dropped. The
+// dropped row is not defined by the API, and is subject to change.
 func (f *Frame) WithIndexer(indexer Indexer) (*Frame, error) {
 	var returnErr error
 
