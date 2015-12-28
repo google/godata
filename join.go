@@ -1,6 +1,10 @@
 package godata
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/google/godata/row"
+)
 
 // JoinResult represents the result of a join operation.
 type JoinResult struct {
@@ -32,13 +36,13 @@ func (j JoinResult) String() string {
 // JoinResultIndexer indexes a JoinResult by delegating to the given RowIndexer.
 type JoinResultIndexer struct {
 	// RowIndexer is the indexer to use for the RowData in either Left or Right.
-	RowIndexer Indexer
+	RowIndexer row.Indexer
 }
 
 // Index returns the index of the contents of a JoinResult. At least one of
 // Left and Right must be non-nil. If both Left and Right are non-nil, then
 // they must have the same index value.
-func (j JoinResultIndexer) Index(data RowData) (Index, error) {
+func (j JoinResultIndexer) Index(data row.Data) (row.Index, error) {
 	projection := make(map[string]interface{})
 
 	for key, val := range data {

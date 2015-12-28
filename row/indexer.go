@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package godata
+package row
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ import (
 
 // Indexer returns an Index for a given row of data.
 type Indexer interface {
-	Index(data RowData) (Index, error)
+	Index(data Data) (Index, error)
 }
 
 // ColumnIndexer indexes the given column names using the default indexing
@@ -45,7 +45,7 @@ func NewColumnIndexer(columns ...string) *ColumnIndexer {
 // Index returns the index value for the given row. Returns error if the row
 // doesn't contain all necessary columns, or if the row contains values that
 // cannot be automatically converted into indices.
-func (c ColumnIndexer) Index(data RowData) (Index, error) {
+func (c ColumnIndexer) Index(data Data) (Index, error) {
 	var vals []interface{}
 	for _, col := range c.columns {
 		val, ok := data[col]

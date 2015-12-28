@@ -16,14 +16,16 @@ package godata
 import (
 	"fmt"
 	"log"
+
+	"github.com/google/godata/row"
 )
 
 func Example_putAndGet() {
-	frame := NewFrame(NewColumnIndexer("index1", "index2"))
-	frame.Put(RowOf("index1", 123, "index2", "foo", "data1", "hello", "data2", "world"))
-	frame.Put(RowOf("index1", 456, "index2", "bar", "data3", "something"))
+	frame := NewFrame(row.NewColumnIndexer("index1", "index2"))
+	frame.Put(row.Of("index1", 123, "index2", "foo", "data1", "hello", "data2", "world"))
+	frame.Put(row.Of("index1", 456, "index2", "bar", "data3", "something"))
 
-	row, err := frame.Get(RowOf("index1", 123, "index2", "foo"))
+	row, err := frame.Get(row.Of("index1", 123, "index2", "foo"))
 	if err != nil {
 		log.Fatalf("Get: %v", err)
 	}
@@ -32,42 +34,42 @@ func Example_putAndGet() {
 }
 
 func Example_joined() {
-	f1 := NewFrame(NewColumnIndexer("index"))
-	f2 := NewFrame(NewColumnIndexer("index"))
+	f1 := NewFrame(row.NewColumnIndexer("index"))
+	f2 := NewFrame(row.NewColumnIndexer("index"))
 
 	// f1 and f2 share an index, so the values will be joined together.
-	f1.Put(RowOf("index", 0, "value", "foo"))
-	f2.Put(RowOf("index", 0, "value", "bar"))
+	f1.Put(row.Of("index", 0, "value", "foo"))
+	f2.Put(row.Of("index", 0, "value", "bar"))
 
 	// f1 and f2 have values at different indices, so index 1 will only contain a
 	// value from f1, and index 2 will only contain a value from f2.
-	f1.Put(RowOf("index", 1, "value", "something"))
-	f2.Put(RowOf("index", 2, "value", "else"))
+	f1.Put(row.Of("index", 1, "value", "something"))
+	f2.Put(row.Of("index", 2, "value", "else"))
 
 	joined, err := f1.Joined(f2)
 	if err != nil {
 		log.Fatalf("Joined: %v", err)
 	}
-	common, err := joined.Get(RowOf("index", 0))
+	common, err := joined.Get(row.Of("index", 0))
 	if err != nil {
 		log.Fatalf("Get: %v", err)
 	}
-	fmt.Println(common)
+	fmt.Println("index:", common["index"], "value:", common["value"])
 
-	leftOnly, err := joined.Get(RowOf("index", 1))
+	leftOnly, err := joined.Get(row.Of("index", 1))
 	if err != nil {
 		log.Fatalf("Get: %v", err)
 	}
-	fmt.Println(leftOnly)
+	fmt.Println("index:", leftOnly["index"], "value:", leftOnly["value"])
 
-	rightOnly, err := joined.Get(RowOf("index", 2))
+	rightOnly, err := joined.Get(row.Of("index", 2))
 	if err != nil {
 		log.Fatalf("Get: %v", err)
 	}
-	fmt.Println(rightOnly)
+	fmt.Println("index:", rightOnly["index"], "value:", rightOnly["value"])
 
 	// Output:
-	// map[index:JoinResult{Left: 0, Right: 0} value:JoinResult{Left: foo, Right: bar}]
-	// map[index:JoinResult{Left: 1} value:JoinResult{Left: something}]
-	// map[index:JoinResult{Right: 2} value:JoinResult{Right: else}]
+	// index: JoinResult{Left: 0, Right: 0} value: JoinResult{Left: foo, Right: bar}
+	// index: JoinResult{Left: 1} value: JoinResult{Left: something}
+	// index: JoinResult{Right: 2} value: JoinResult{Right: else}
 }

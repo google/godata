@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package godata
+package row
 
 import (
 	"fmt"
@@ -88,7 +88,7 @@ func (m MultiIndex) Less(item btree.Item) bool {
 	case MultiIndex:
 		mi = item
 	case Row:
-		return m.Less(item.index)
+		return m.Less(item.Index)
 	}
 
 	for i, ind := range m.indices {
@@ -127,7 +127,7 @@ func (s StringIndex) Less(item btree.Item) bool {
 	case StringIndex:
 		return string(s) < string(item)
 	case Row:
-		return s.Less(item.index)
+		return s.Less(item.Index)
 	}
 	return false
 }
@@ -144,7 +144,7 @@ func (s IntIndex) Less(item btree.Item) bool {
 	case IntIndex:
 		return int(s) < int(item)
 	case Row:
-		return s.Less(item.index)
+		return s.Less(item.Index)
 	}
 	return false
 }

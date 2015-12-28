@@ -11,7 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package godata
+// Package row defines row primitives that are used to construct a Frame.
+package row
 
 import (
 	"log"
@@ -19,21 +20,21 @@ import (
 	"github.com/google/btree"
 )
 
-// RowData maps column names to column values for a given row.
-type RowData map[string]interface{}
+// Data maps column names to column values for a given row.
+type Data map[string]interface{}
 
-// RowOf wraps the given arguments into a RowData. Arguments must be given as
+// Of wraps the given arguments into a Data. Arguments must be given as
 // string keys followed by values. The function panics if the arguments are not
 // consistent with this requirement.
-func RowOf(args ...interface{}) RowData {
+func Of(args ...interface{}) Data {
 	if len(args)%2 == 1 {
-		log.Fatalf("Cannot call RowOf(%v) for odd number of arguments", args)
+		log.Fatalf("Cannot call Of(%v) for odd number of arguments", args)
 	}
 	data := make(map[string]interface{})
 	for i := 0; i < len(args)-1; i += 2 {
 		key, ok := args[i].(string)
 		if !ok {
-			log.Fatalf("RowOf(%v) needs string keys on even indices", args)
+			log.Fatalf("Of(%v) needs string keys on even indices", args)
 		}
 		data[key] = args[i+1]
 	}
@@ -42,8 +43,11 @@ func RowOf(args ...interface{}) RowData {
 
 // Row represents a single entry in a Frame.
 type Row struct {
-	index Index
-	data  RowData
+	// Index contains the index for the row.
+	Index Index
+
+	// Data contains the columns of data for the row.
+	Data Data
 }
 
 // Less returns true if the row is less than the given Row sharing the same
@@ -54,9 +58,9 @@ func (r Row) Less(item btree.Item) bool {
 	default:
 		log.Fatal("btree.Item is not a Row or Index")
 	case Row:
-		return r.index.Less(item.index)
+		return r.Index.Less(item.Index)
 	case Index:
-		return r.index.Less(item)
+		return r.Index.Less(item)
 	}
 	return false
 }
